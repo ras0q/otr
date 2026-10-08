@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 )
+
+const ContentTypeJSON = "application/json"
 
 func Handle(h func(w http.ResponseWriter, req *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +49,18 @@ func BadRequest(message string) error {
 
 func NotImplemented(message string) error {
 	return StatusError(http.StatusNotImplemented, message)
+}
+
+// Accepts reports whether the Accept header value lists mediaType.
+// Parameters on each Accept entry (e.g. q=) are ignored.
+func Accepts(acceptHeader, mediaType string) bool {
+	for _, part := range strings.Split(acceptHeader, ",") {
+		media := strings.TrimSpace(strings.Split(part, ";")[0])
+		if strings.EqualFold(media, mediaType) {
+			return true
+		}
+	}
+	return false
 }
 
 func WriteJSON(w http.ResponseWriter, contentType string, v any) error {

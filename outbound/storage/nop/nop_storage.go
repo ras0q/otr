@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"io"
+
+	"github.com/ras0q/otr/outbound/storage"
 )
 
-// Storage is a placeholder backend.
-// TODO: replace with local or S3-compatible storage.
 type Storage struct{}
+
+var _ storage.Storage = Storage{}
 
 func (Storage) Get(context.Context, string) (io.Reader, error) {
 	return nil, errors.New("not found")

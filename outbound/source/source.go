@@ -2,11 +2,13 @@ package source
 
 import (
 	"context"
+	"io"
 	"net/url"
 )
 
 type Source interface {
 	GetLatestRelease(ctx context.Context, id Identity) (Release, error)
+	DownloadReleaseAsset(ctx context.Context, assetURL url.URL) (io.ReadCloser, error)
 }
 
 // Identity is owner/name on the one source wired into this process (e.g. cli/cli).

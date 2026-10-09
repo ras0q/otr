@@ -1,6 +1,8 @@
 package app
 
 import (
+	"io"
+
 	"github.com/aquaproj/aqua/v2/pkg/asset"
 	"github.com/ras0q/otr/outbound/source"
 )
@@ -22,4 +24,11 @@ type Artifact asset.AssetInfo
 // Target selects a platform-specific variant (os / arch / libc).
 type Target struct {
 	OS, Arch, Libc string
+}
+
+// ReleaseAsset is a versioned release file selected for a platform target.
+type ReleaseAsset struct {
+	Name string
+	Size int64
+	Body io.ReadCloser
 }

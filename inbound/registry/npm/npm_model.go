@@ -95,77 +95,77 @@ type PackumentInput struct {
 }
 
 // NewPackumentInstall builds the install-v1 packument for a tool or platform package.
-func NewPackumentInstall(in PackumentInput) PackumentInstall {
-	name, ver := packumentNameAndVersion(in)
+func NewPackumentInstall(packumentInput PackumentInput) PackumentInstall {
+	name, catalogVersion := packumentNameAndVersion(packumentInput)
 	return PackumentInstall{
 		Name:     name,
-		Modified: in.Modified,
-		DistTags: map[string]string{"latest": ver},
-		Versions: map[string]Version{ver: buildVersion(in, name, ver)},
+		Modified: packumentInput.Modified,
+		DistTags: map[string]string{"latest": catalogVersion},
+		Versions: map[string]Version{catalogVersion: buildVersion(packumentInput, name, catalogVersion)},
 	}
 }
 
 // NewPackumentFull builds the full metadata packument for a tool or platform package.
-func NewPackumentFull(in PackumentInput) PackumentFull {
-	name, ver := packumentNameAndVersion(in)
-	repo := repositoryFromCatalog(in.Catalog)
-	doc := buildVersionDocument(in, name, ver, repo)
-	out := PackumentFull{
+func NewPackumentFull(packumentInput PackumentInput) PackumentFull {
+	name, catalogVersion := packumentNameAndVersion(packumentInput)
+	repository := repositoryFromCatalog(packumentInput.Catalog)
+	versionDocument := buildVersionDocument(packumentInput, name, catalogVersion, repository)
+	packumentFull := PackumentFull{
 		ID:         name,
 		Rev:        "1",
 		Name:       name,
 		License:    "MIT",
-		DistTags:   map[string]string{"latest": ver},
-		Versions:   map[string]VersionDocument{ver: doc},
-		Time:       map[string]string{"modified": in.Modified, ver: in.Modified},
-		Repository: repo,
+		DistTags:   map[string]string{"latest": catalogVersion},
+		Versions:   map[string]VersionDocument{catalogVersion: versionDocument},
+		Time:       map[string]string{"modified": packumentInput.Modified, catalogVersion: packumentInput.Modified},
+		Repository: repository,
 	}
-	if in.Target != nil {
-		out.Description = "OTR platform package"
-		return out
+	if packumentInput.Target != nil {
+		packumentFull.Description = "OTR platform package"
+		return packumentFull
 	}
-	out.Description = "OTR tool package"
-	out.Readme = "# OTR\n"
-	return out
+	packumentFull.Description = "OTR tool package"
+	packumentFull.Readme = "# OTR\n"
+	return packumentFull
 }
 
 // NewVersionDocument builds a single version document for GET /{package}/{version}.
-func NewVersionDocument(in PackumentInput, version string) VersionDocument {
-	name, _ := packumentNameAndVersion(in)
-	return buildVersionDocument(in, name, version, repositoryFromCatalog(in.Catalog))
+func NewVersionDocument(packumentInput PackumentInput, version string) VersionDocument {
+	name, _ := packumentNameAndVersion(packumentInput)
+	return buildVersionDocument(packumentInput, name, version, repositoryFromCatalog(packumentInput.Catalog))
 }
 
-func packumentNameAndVersion(in PackumentInput) (name, version string) {
-	version = string(in.Catalog.Version)
-	repoBase := strings.ReplaceAll(string(in.Catalog.Identity), "/", "--")
-	if in.Target != nil {
-		suffix := in.Target.OS + "-" + in.Target.Arch
-		if in.Target.Libc != "" {
-			suffix += "-" + in.Target.Libc
+func packumentNameAndVersion(packumentInput PackumentInput) (name, version string) {
+	version = string(packumentInput.Catalog.Version)
+	repositorySlug := strings.ReplaceAll(string(packumentInput.Catalog.Identity), "/", "--")
+	if packumentInput.Target != nil {
+		suffix := packumentInput.Target.OS + "-" + packumentInput.Target.Arch
+		if packumentInput.Target.Libc != "" {
+			suffix += "-" + packumentInput.Target.Libc
 		}
-		return in.Scope + "/" + repoBase + "--" + suffix, version
+		return packumentInput.Scope + "/" + repositorySlug + "--" + suffix, version
 	}
-	return in.Scope + "/" + repoBase, version
+	return packumentInput.Scope + "/" + repositorySlug, version
 }
 
-func buildVersion(in PackumentInput, name, version string) Version {
+func buildVersion(packumentInput PackumentInput, name, version string) Version {
 	hasShrinkwrap := false
-	if in.Target != nil {
+	if packumentInput.Target != nil {
 		return Version{
 			Name:          name,
 			Version:       version,
-			OS:            []string{in.Target.OS},
-			CPU:           []string{in.Target.Arch},
+			OS:            []string{packumentInput.Target.OS},
+			CPU:           []string{packumentInput.Target.Arch},
 			Directories:   map[string]string{},
-			Dist:          distFor(name, version, in.BaseURL),
+			Dist:          distFor(name, version, packumentInput.BaseURL),
 			HasShrinkwrap: &hasShrinkwrap,
 		}
 	}
-	repoBase := strings.ReplaceAll(string(in.Catalog.Identity), "/", "--")
-	optionalDependencies := make(map[string]string, len(in.Catalog.Artifacts))
-	for _, a := range in.Catalog.Artifacts {
-		t := &app.Target{OS: a.OS, Arch: a.Arch}
-		optionalDependencies[in.Scope+"/"+repoBase+"--"+t.OS+"-"+t.Arch] = version
+	repositorySlug := strings.ReplaceAll(string(packumentInput.Catalog.Identity), "/", "--")
+	optionalDependencies := make(map[string]string, len(packumentInput.Catalog.Artifacts))
+	for _, artifact := range packumentInput.Catalog.Artifacts {
+		platformTarget := &app.Target{OS: artifact.OS, Arch: artifact.Arch}
+		optionalDependencies[packumentInput.Scope+"/"+repositorySlug+"--"+platformTarget.OS+"-"+platformTarget.Arch] = version
 	}
 	return Version{
 		Name:    name,
@@ -175,19 +175,19 @@ func buildVersion(in PackumentInput, name, version string) Version {
 		},
 		OptionalDependencies: optionalDependencies,
 		Directories:          map[string]string{},
-		Dist:                 distFor(name, version, in.BaseURL),
+		Dist:                 distFor(name, version, packumentInput.BaseURL),
 		HasShrinkwrap:        &hasShrinkwrap,
 	}
 }
 
-func buildVersionDocument(in PackumentInput, name, version string, repo *Repository) VersionDocument {
+func buildVersionDocument(packumentInput PackumentInput, name, version string, repository *Repository) VersionDocument {
 	return VersionDocument{
-		Version:        buildVersion(in, name, version),
+		Version:        buildVersion(packumentInput, name, version),
 		Description:    fmt.Sprintf("OTR package for %s", name),
 		License:        "MIT",
 		ID:             name + "@" + version,
 		ReadmeFilename: "README.md",
-		Repository:     repo,
+		Repository:     repository,
 	}
 }
 
@@ -203,11 +203,11 @@ func distFor(name, version, baseURL string) Dist {
 }
 
 func tarballURL(baseURL, name, version string) string {
-	base := strings.TrimSuffix(baseURL, "/")
-	short := name
-	if i := strings.LastIndex(name, "/"); i >= 0 {
-		short = name[i+1:]
+	normalizedBaseURL := strings.TrimSuffix(baseURL, "/")
+	unscopedName := name
+	if lastSlash := strings.LastIndex(name, "/"); lastSlash >= 0 {
+		unscopedName = name[lastSlash+1:]
 	}
-	filename := fmt.Sprintf("%s-%s.tgz", short, version)
-	return fmt.Sprintf("%s/%s/-/%s", base, url.PathEscape(name), filename)
+	filename := fmt.Sprintf("%s-%s.tgz", unscopedName, version)
+	return fmt.Sprintf("%s/%s/-/%s", normalizedBaseURL, url.PathEscape(name), filename)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,6 +17,8 @@ type Source struct {
 	token      string
 }
 
+var _ source.Source = (*Source)(nil)
+
 func NewSource(token string) *Source {
 	return &Source{
 		httpClient: http.DefaultClient,
@@ -23,8 +26,8 @@ func NewSource(token string) *Source {
 	}
 }
 
-func (s *Source) GetLatestRelease(ctx context.Context, id source.Identity) (source.Release, error) {
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", id)
+func (s *Source) GetLatestRelease(ctx context.Context, identity source.Identity) (source.Release, error) {
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", identity)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return source.Release{}, err
@@ -58,21 +61,41 @@ func (s *Source) GetLatestRelease(ctx context.Context, id source.Identity) (sour
 
 	version := source.Version(strings.TrimPrefix(body.TagName, "v"))
 	assets := make([]source.Asset, 0, len(body.Assets))
-	for _, a := range body.Assets {
-		u, err := url.Parse(a.BrowserDownloadURL)
+	for _, apiAsset := range body.Assets {
+		downloadURL, err := url.Parse(apiAsset.BrowserDownloadURL)
 		if err != nil {
 			return source.Release{}, fmt.Errorf("parse asset url: %w", err)
 		}
 		assets = append(assets, source.Asset{
-			Name: a.Name,
-			Size: a.Size,
-			URL:  *u,
+			Name: apiAsset.Name,
+			Size: apiAsset.Size,
+			URL:  *downloadURL,
 		})
 	}
 
 	return source.Release{
 		Version:       version,
-		RepositoryURL: "https://github.com/" + string(id) + ".git",
+		RepositoryURL: "https://github.com/" + string(identity) + ".git",
 		Assets:        assets,
 	}, nil
+}
+
+func (s *Source) DownloadReleaseAsset(ctx context.Context, assetURL url.URL) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, assetURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	if s.token != "" {
+		req.Header.Set("Authorization", "Bearer "+s.token)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("download asset: %s", resp.Status)
+	}
+	return resp.Body, nil
 }

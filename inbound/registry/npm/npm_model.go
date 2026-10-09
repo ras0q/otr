@@ -87,11 +87,12 @@ type PackumentFull struct {
 
 // PackumentInput carries resolved catalog data and registry presentation settings.
 type PackumentInput struct {
-	Scope    string
-	BaseURL  string
-	Catalog  app.Catalog
-	Target   *app.Target
-	Modified string
+	Scope        string
+	BaseURL      string
+	Catalog      app.Catalog
+	Target       *app.Target
+	Modified      string
+	TarballShasum string
 }
 
 // NewPackumentInstall builds the install-v1 packument for a tool or platform package.
@@ -157,7 +158,7 @@ func buildVersion(packumentInput PackumentInput, name, version string) Version {
 			OS:            []string{packumentInput.Target.OS},
 			CPU:           []string{packumentInput.Target.Arch},
 			Directories:   map[string]string{},
-			Dist:          distFor(name, version, packumentInput.BaseURL),
+			Dist:          distFor(name, version, packumentInput.BaseURL, packumentInput.TarballShasum),
 			HasShrinkwrap: &hasShrinkwrap,
 		}
 	}
@@ -175,7 +176,7 @@ func buildVersion(packumentInput PackumentInput, name, version string) Version {
 		},
 		OptionalDependencies: optionalDependencies,
 		Directories:          map[string]string{},
-		Dist:                 distFor(name, version, packumentInput.BaseURL),
+		Dist:                 distFor(name, version, packumentInput.BaseURL, packumentInput.TarballShasum),
 		HasShrinkwrap:        &hasShrinkwrap,
 	}
 }
@@ -195,10 +196,10 @@ func repositoryFromCatalog(catalog app.Catalog) *Repository {
 	return &Repository{Type: "git", URL: catalog.RepositoryURL}
 }
 
-func distFor(name, version, baseURL string) Dist {
+func distFor(name, version, baseURL, shasum string) Dist {
 	return Dist{
 		Tarball: tarballURL(baseURL, name, version),
-		Shasum:  "0000000000000000000000000000000000000000", // TODO: real tarball shasum once packages are materialized.
+		Shasum:  shasum,
 	}
 }
 

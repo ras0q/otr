@@ -2,8 +2,17 @@ package npm
 
 import (
 	"fmt"
+	"path"
 	"strings"
 )
+
+func tarballStorageKey(packageName, version string) string {
+	return path.Join("tarballs", packageName, version+".tgz")
+}
+
+func tarballShasumStorageKey(packageName, version string) string {
+	return path.Join("tarballs", packageName, version+".sha1")
+}
 
 func tarballFilename(packageName, version string) string {
 	unscopedName := packageName

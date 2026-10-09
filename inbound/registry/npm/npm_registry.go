@@ -84,12 +84,17 @@ func (r *Registry) GetPackage(w http.ResponseWriter, req *http.Request) error {
 	}
 
 	modified := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	shasum, err := r.tarballShasum(req.Context(), catalog, target, string(catalog.Version))
+	if err != nil {
+		return fmt.Errorf("tarball shasum: %w", err)
+	}
 	packumentInput := PackumentInput{
-		Scope:    r.scope,
-		BaseURL:  baseURL,
-		Catalog:  catalog,
-		Target:   target,
-		Modified: modified,
+		Scope:         r.scope,
+		BaseURL:       baseURL,
+		Catalog:       catalog,
+		Target:        target,
+		Modified:      modified,
+		TarballShasum: shasum,
 	}
 
 	if install {
@@ -134,11 +139,16 @@ func (r *Registry) GetPackageWithVersion(w http.ResponseWriter, req *http.Reques
 		}
 	}
 
+	shasum, err := r.tarballShasum(req.Context(), catalog, target, version)
+	if err != nil {
+		return fmt.Errorf("tarball shasum: %w", err)
+	}
 	packumentInput := PackumentInput{
-		Scope:   r.scope,
-		BaseURL: baseURL,
-		Catalog: catalog,
-		Target:  target,
+		Scope:         r.scope,
+		BaseURL:       baseURL,
+		Catalog:       catalog,
+		Target:        target,
+		TarballShasum: shasum,
 	}
 
 	return reghttp.WriteJSON(w, reghttp.ContentTypeJSON, NewVersionDocument(packumentInput, version))

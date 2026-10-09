@@ -1,0 +1,7 @@
+{
+  "name": "otr-registry-e2e",
+  "private": true,
+  "devDependencies": {
+    "@otr/example--tool": "1.0.0"
+  }
+}

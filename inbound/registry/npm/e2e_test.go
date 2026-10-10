@@ -35,9 +35,9 @@ func TestE2EInstall(t *testing.T) {
 	}
 
 	storageRoot := t.TempDir()
-	blobStorage, err := local.New(storageRoot)
+	store, err := local.NewStorage(storageRoot)
 	if err != nil {
-		t.Fatalf("local storage: %v", err)
+		t.Fatalf("storage: %v", err)
 	}
 
 	const version = "1.0.0"
@@ -47,7 +47,7 @@ func TestE2EInstall(t *testing.T) {
 		Assets:        nil,
 	}})
 
-	srv := httptest.NewTestServer(t, npm.NewRegistry(service, blobStorage, npm.Config{
+	srv := httptest.NewTestServer(t, npm.NewRegistry(service, store, npm.Config{
 		Scope: "@otr",
 	}))
 	srv.Start()

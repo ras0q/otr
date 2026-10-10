@@ -2,9 +2,7 @@ package npm
 
 import (
 	"context"
-	"crypto/sha1"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,97 +17,40 @@ import (
 var launcherScript []byte
 
 func (r *Registry) openTarball(ctx context.Context, catalog app.Catalog, target *app.Target, version string) (io.ReadCloser, error) {
-	if string(catalog.Version) != version {
-		return nil, fmt.Errorf("version %q not found", version)
-	}
-
 	packumentInput := PackumentInput{Scope: r.scope, Catalog: catalog, Target: target}
 	packageName, _ := packumentNameAndVersion(packumentInput)
-	storageKey := tarballStorageKey(packageName, version)
+	key := tarballKey(packageName, version)
 
-	shasumKey := tarballShasumStorageKey(packageName, version)
-
-	return storage.OpenCached(ctx, r.storage, storageKey, func(ctx context.Context, writer io.Writer) error {
-		hasher := sha1.New()
-		tracked := io.MultiWriter(writer, hasher)
-
-		var err error
-		if target != nil {
-			err = r.writePlatformTarball(ctx, tracked, packumentInput, packageName, version, *target)
-		} else {
-			err = writeToolTarball(ctx, tracked, packumentInput, packageName, version)
-		}
-		if err != nil {
-			return err
-		}
-
-		shasum := hex.EncodeToString(hasher.Sum(nil))
-		return r.storage.Put(ctx, shasumKey, strings.NewReader(shasum))
-	})
+	if _, err := r.ensureTarballInfo(ctx, catalog, target, version); err != nil {
+		return nil, err
+	}
+	reader, _, err := r.store.Open(ctx, key)
+	return reader, err
 }
 
 func (r *Registry) tarballShasum(ctx context.Context, catalog app.Catalog, target *app.Target, version string) (string, error) {
+	info, err := r.ensureTarballInfo(ctx, catalog, target, version)
+	if err != nil {
+		return "", err
+	}
+	return info.SHA1, nil
+}
+
+func (r *Registry) ensureTarballInfo(ctx context.Context, catalog app.Catalog, target *app.Target, version string) (storage.Info, error) {
+	if string(catalog.Version) != version {
+		return storage.Info{}, fmt.Errorf("version %q not found", version)
+	}
+
 	packumentInput := PackumentInput{Scope: r.scope, Catalog: catalog, Target: target}
 	packageName, _ := packumentNameAndVersion(packumentInput)
-	shasumKey := tarballShasumStorageKey(packageName, version)
-	tarballKey := tarballStorageKey(packageName, version)
+	key := tarballKey(packageName, version)
 
-	if shasum, err := readStorageText(ctx, r.storage, shasumKey); err == nil && shasum != "" {
-		return shasum, nil
-	}
-
-	if ok, err := r.storage.Exists(ctx, tarballKey); err != nil {
-		return "", err
-	} else if ok {
-		return r.writeTarballShasumFromStored(ctx, packageName, version)
-	}
-
-	if _, err := r.openTarball(ctx, catalog, target, version); err != nil {
-		return "", err
-	}
-	return readStorageText(ctx, r.storage, shasumKey)
-}
-
-func (r *Registry) writeTarballShasumFromStored(ctx context.Context, packageName, version string) (string, error) {
-	tarballKey := tarballStorageKey(packageName, version)
-	shasumKey := tarballShasumStorageKey(packageName, version)
-
-	reader, err := r.storage.Get(ctx, tarballKey)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		if closer, ok := reader.(io.Closer); ok {
-			_ = closer.Close()
+	return r.store.PopulateIfAbsent(ctx, key, func(ctx context.Context, writer io.Writer) error {
+		if target != nil {
+			return r.writePlatformTarball(ctx, writer, packumentInput, packageName, version, *target)
 		}
-	}()
-
-	hasher := sha1.New()
-	if _, err := io.Copy(hasher, reader); err != nil {
-		return "", fmt.Errorf("hash tarball: %w", err)
-	}
-	shasum := hex.EncodeToString(hasher.Sum(nil))
-	if err := r.storage.Put(ctx, shasumKey, strings.NewReader(shasum)); err != nil {
-		return "", err
-	}
-	return shasum, nil
-}
-
-func readStorageText(ctx context.Context, backend storage.Storage, key string) (string, error) {
-	reader, err := backend.Get(ctx, key)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		if closer, ok := reader.(io.Closer); ok {
-			_ = closer.Close()
-		}
-	}()
-	body, err := io.ReadAll(reader)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(body)), nil
+		return writeToolTarball(ctx, writer, packumentInput, packageName, version)
+	})
 }
 
 func writeToolTarball(ctx context.Context, writer io.Writer, packumentInput PackumentInput, packageName, version string) error {

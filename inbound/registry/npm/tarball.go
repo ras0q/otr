@@ -4,14 +4,12 @@ import (
 	"fmt"
 	"path"
 	"strings"
+
+	"github.com/ras0q/otr/outbound/storage"
 )
 
-func tarballStorageKey(packageName, version string) string {
-	return path.Join("tarballs", packageName, version+".tgz")
-}
-
-func tarballShasumStorageKey(packageName, version string) string {
-	return path.Join("tarballs", packageName, version+".sha1")
+func tarballKey(packageName, version string) storage.Key {
+	return storage.Key(path.Join("tarballs", packageName, version+".tgz"))
 }
 
 func tarballFilename(packageName, version string) string {

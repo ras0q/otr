@@ -1,6 +1,7 @@
 package npm
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,14 +24,14 @@ type Config struct {
 type Registry struct {
 	http.ServeMux
 	service   app.Service
-	storage   storage.Storage
+	store     storage.Storage
 	publicURL string
 	scope     string
 }
 
 var _ http.Handler = (*Registry)(nil)
 
-func NewRegistry(service app.Service, blobStorage storage.Storage, config Config) *Registry {
+func NewRegistry(service app.Service, store storage.Storage, config Config) *Registry {
 	scope := strings.TrimSpace(config.Scope)
 	if scope == "" {
 		scope = "@otr"
@@ -40,7 +41,7 @@ func NewRegistry(service app.Service, blobStorage storage.Storage, config Config
 
 	r := &Registry{
 		service:   service,
-		storage:   blobStorage,
+		store:     store,
 		publicURL: strings.TrimSuffix(strings.TrimSpace(config.PublicURL), "/"),
 		scope:     scope,
 	}
@@ -191,7 +192,7 @@ func (r *Registry) DownloadPackage(w http.ResponseWriter, req *http.Request) err
 
 	tarballReader, err := r.openTarball(req.Context(), catalog, target, version)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, storage.ErrNotFound) {
 			return reghttp.StatusError(http.StatusNotFound, err.Error())
 		}
 		return fmt.Errorf("open tarball: %w", err)

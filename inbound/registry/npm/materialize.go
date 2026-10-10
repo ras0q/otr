@@ -2,6 +2,7 @@ package npm
 
 import (
 	"context"
+	"errors"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -29,11 +30,20 @@ func (r *Registry) openTarball(ctx context.Context, catalog app.Catalog, target 
 }
 
 func (r *Registry) tarballShasum(ctx context.Context, catalog app.Catalog, target *app.Target, version string) (string, error) {
-	info, err := r.ensureTarballInfo(ctx, catalog, target, version)
-	if err != nil {
-		return "", err
+	packumentInput := PackumentInput{Scope: r.scope, Catalog: catalog, Target: target}
+	packageName, _ := packumentNameAndVersion(packumentInput)
+	key := tarballKey(packageName, version)
+
+	info, err := r.store.Head(ctx, key)
+	if err == nil {
+		return info.SHA1, nil
 	}
-	return info.SHA1, nil
+	if errors.Is(err, storage.ErrNotFound) {
+		// Packument metadata only: npm may probe many optional platform packages.
+		// Materialize on GET /.../-/*.tgz, not here.
+		return "", nil
+	}
+	return "", err
 }
 
 func (r *Registry) ensureTarballInfo(ctx context.Context, catalog app.Catalog, target *app.Target, version string) (storage.Info, error) {
@@ -103,16 +113,15 @@ func (r *Registry) writePlatformTarball(ctx context.Context, writer io.Writer, p
 		return fmt.Errorf("encode package.json: %w", err)
 	}
 
-	assetPath := "package/asset/" + releaseAsset.Name
-	files := []archives.FileInfo{
-		archiveBytes("package/package.json", 0o644, packageJSON),
-		archiveStream(assetPath, 0o644, releaseAsset.Size, func() (io.ReadCloser, error) {
-			return releaseAsset.Body, nil
-		}),
-	}
-	if err := writeNPMPack(ctx, writer, files); err != nil {
+	binaryName, binaryData, err := binaryFromReleaseArchive(ctx, releaseAsset.Name, releaseAsset.Body)
+	if err != nil {
 		return err
 	}
 	releaseAssetClosed = true
-	return nil
+
+	files := []archives.FileInfo{
+		archiveBytes("package/package.json", 0o644, packageJSON),
+		archiveBytes("package/asset/"+binaryName, 0o755, binaryData),
+	}
+	return writeNPMPack(ctx, writer, files)
 }
